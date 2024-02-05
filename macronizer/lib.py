@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 # Copyright 2015-2021 Johan Winge
 #
 # This program is free software: you can redistribute it and/or modify
@@ -16,29 +13,36 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import os
-import re
-from tempfile import mkstemp
 from collections import defaultdict
-import sqlite3
 from html import escape
+import os
+import pathlib
+import re
+import sqlite3
+from tempfile import mkstemp
+import typing as t
 
-import postags
+from macronizer import postags
+
 
 USE_DB = True
-DB_NAME = os.path.join(os.path.dirname(__file__), "macronizer.db")
+BASE_DIR = pathlib.Path(__file__).parent.parent
+DB_NAME = BASE_DIR / "macronizer.db"
 RFTAGGER_DIR = "/usr/local/bin"
-MORPHEUS_DIR = os.path.join(os.path.dirname(__file__), "morpheus")
-MACRONS_FILE = os.path.join(os.path.dirname(__file__), "macrons.txt")
+MORPHEUS_DIR = BASE_DIR / "morpheus"
+MACRONS_FILE = BASE_DIR / "macrons.txt"
 
 
-def pairwise(iterable):
+Scansion: t.TypeAlias = dict[tuple[int, str], tuple[int, str, int]]
+
+
+def pairwise(iterable: t.Iterable[str]):
     """s -> (s0,s1), (s2,s3), (s4, s5), ..."""
     a = iter(iterable)
     return zip(a, a)
 
 
-def toascii(txt):
+def toascii(txt: str) -> str:
     for source, replacement in [
         ("æ", "ae"),
         ("Æ", "Ae"),
@@ -55,13 +59,13 @@ def toascii(txt):
     return txt
 
 
-def touiorthography(txt):
+def touiorthography(txt: str) -> str:
     for source, replacement in [("v", "u"), ("U", "V"), ("j", "i"), ("J", "I")]:
         txt = txt.replace(source, replacement)
     return txt
 
 
-def clean_lemma(lemma):
+def clean_lemma(lemma: str) -> str:
     return (
         lemma.replace("#", "")
         .replace("1", "")
@@ -74,9 +78,9 @@ def clean_lemma(lemma):
 
 class Wordlist:
     def __init__(self):
-        self.unknownwords = set()  # Unknown to Morpheus
-        self.formtolemmas = defaultdict(list)
-        self.formtoaccenteds = defaultdict(list)
+        self.unknownwords: set[str] = set()  # Unknown to Morpheus
+        self.formtolemmas: dict[str, list[str]] = defaultdict(list)
+        self.formtoaccenteds: dict[str, list[str]] = defaultdict(list)
         self.formtotaglemmaaccents = defaultdict(list)
         if USE_DB:
             self.dbconn = sqlite3.connect(DB_NAME)
@@ -84,18 +88,16 @@ class Wordlist:
         else:
             self.loadwordsfromfile(MACRONS_FILE)
 
-    # enddef
-
     def reinitializedatabase(self):
         self.dbcursor.execute("DROP TABLE IF EXISTS morpheus")
         self.dbcursor.execute(
             """
             CREATE TABLE morpheus(
-                id INTEGER PRIMARY KEY, 
-                wordform TEXT NOT NULL, 
-                morphtag TEXT, 
-                lemma TEXT, 
-                accented TEXT, 
+                id INTEGER PRIMARY KEY,
+                wordform TEXT NOT NULL,
+                morphtag TEXT,
+                lemma TEXT,
+                accented TEXT,
                 UNIQUE(wordform, morphtag, lemma, accented)
             )
         """
@@ -104,10 +106,8 @@ class Wordlist:
         self.dbcursor.execute("CREATE INDEX morpheus_wordform_index ON morpheus (wordform)")
         self.dbconn.commit()
 
-    # enddef
-
-    def loadwordsfromfile(self, filename, storeindb=False):
-        with open(filename, "r", encoding="utf-8") as plaindbfile:
+    def loadwordsfromfile(self, path: pathlib.Path, storeindb: bool = False):
+        with path.open("r", encoding="utf-8") as plaindbfile:
             for line in plaindbfile:
                 if line.startswith("#"):
                     continue
@@ -119,26 +119,21 @@ class Wordlist:
                         (wordform, morphtag, lemma, accented),
                     )
 
-    # enddef
-
-    def loadwords(self, words):  # Expects a set of lowercase words
-        unseenwords = set()
+    def loadwords(self, words: set[str]):  # Expects a set of lowercase words
+        unseenwords: set[str] = set()
         for word in words:
             if word in self.formtotaglemmaaccents:  # Word is already loaded
                 continue
             if not self.loadwordfromdb(word):  # Could not find word in database
                 unseenwords.add(word)
         if len(unseenwords) > 0:
-            self.crunchwords(
-                unseenwords
-            )  # Try to parse unseen words with Morpheus, and add result to the database
+            # Try to parse unseen words with Morpheus, and add result to the database
+            self.crunchwords(unseenwords)
             for word in unseenwords:
                 if not self.loadwordfromdb(word):
                     raise Exception("Could not store %s in the database." % word)
 
-    # enddef
-
-    def loadwordfromdb(self, word):
+    def loadwordfromdb(self, word: str):
         if USE_DB:
             try:
                 self.dbcursor.execute(
@@ -158,19 +153,22 @@ class Wordlist:
             self.addwordparse(word, None, None, None)
         return True
 
-    # enddef
-
-    def addwordparse(self, wordform, morphtag, lemma, accented):
+    def addwordparse(
+        self,
+        wordform: str,
+        morphtag: str | None,
+        lemma: str | None,
+        accented: str | None,
+    ):
         if accented is None:
             self.unknownwords.add(wordform)
-        else:
-            self.formtolemmas[wordform].append(lemma)
-            self.formtoaccenteds[wordform].append(accented.lower())
-            self.formtotaglemmaaccents[wordform].append((morphtag, lemma, accented))
+            return
 
-    # enddef
+        self.formtolemmas[wordform].append(lemma)
+        self.formtoaccenteds[wordform].append(accented.lower())
+        self.formtotaglemmaaccents[wordform].append((morphtag, lemma, accented))
 
-    def crunchwords(self, words):
+    def crunchwords(self, words: set[str]):
         morphinpfd, morphinpfname = mkstemp()
         os.close(morphinpfd)
         crunchedfd, crunchedfname = mkstemp()
@@ -192,20 +190,20 @@ class Wordlist:
         with open(crunchedfname, "r", encoding="utf-8") as crunchedfile:
             morpheus = crunchedfile.read()
         os.remove(crunchedfname)
-        crunchedwordforms = {}
-        knownwords = set()
+        crunchedwordforms: dict[str, str] = {}
+        knownwords: set[str] = set()
         for wordform, nls in pairwise(morpheus.split("\n")):
             wordform = wordform.strip().lower()
             nls = nls.strip()
             crunchedwordforms[wordform] = crunchedwordforms.get(wordform, "") + nls
         for wordform, nls in crunchedwordforms.items():
-            parses = []
+            parses: list[postags.Parse] = []
             for nl in nls.split("<NL>"):
                 nl = nl.replace("</NL>", "")
                 nlparts = nl.split()
                 if len(nlparts) > 0:
                     parses += postags.morpheus_to_parses(wordform, nl)
-            lemmatagtoaccenteds = defaultdict(list)
+            lemmatagtoaccenteds: dict[tuple[str, str], list[str]] = defaultdict(list)
             for parse in parses:
                 lemma = clean_lemma(parse[postags.LEMMA])
                 parse[postags.LEMMA] = lemma
@@ -224,11 +222,11 @@ class Wordlist:
                 bestaccented = sorted(
                     accenteds, key=lambda x: x.count("v") + x.count("j") + x.count("J")
                 )[-1]
-                lemmatagtoaccenteds[(lemma, tag)] = bestaccented
+                lemmatagtoaccenteds[(lemma, tag)] = [bestaccented]
             for (lemma, tag), accented in lemmatagtoaccenteds.items():
                 self.dbcursor.execute(
                     "INSERT OR IGNORE INTO morpheus (wordform, morphtag, lemma, accented) VALUES (?, ?, ?, ?)",
-                    (wordform, tag, lemma, accented),
+                    (wordform, tag, lemma, accented[0]),
                 )
         # The remaining were unknown to Morpheus:
         for wordform in words - knownwords:
@@ -237,11 +235,6 @@ class Wordlist:
             )
 
         self.dbconn.commit()
-
-    # enddef
-
-
-# endclass
 
 
 prefixeswithshortj = (
@@ -263,7 +256,7 @@ prefixeswithshortj = (
 
 
 class Token:
-    def __init__(self, text):
+    def __init__(self, text: str):
         self.tag = ""
         self.lemma = ""
         self.accented = [""]
@@ -277,9 +270,7 @@ class Token:
         self.endssentence = False
         self.isunknown = False
 
-    # enddef
-
-    def split(self, pos, enclitic):
+    def split(self, pos: int, enclitic: bool):
         newtokena = Token(self.text[:-pos])
         newtokenb = Token(self.text[-pos:])
         newtokena.startssentence = self.startssentence
@@ -288,14 +279,10 @@ class Token:
             newtokenb.isenclitic = True
         return [newtokena, newtokenb]
 
-    # enddef
-
     def show(self):
         print("\t".join([self.text, self.tag, self.lemma, self.accented[0]])).expandtabs(16)
 
-    # enddef
-
-    def macronize(self, domacronize, alsomaius, performutov, performitoj):
+    def macronize(self, domacronize: bool, alsomaius: bool, performutov: bool, performitoj: bool):
         plain = self.text
         if not self.isword:
             self.macronized = plain
@@ -319,12 +306,12 @@ class Token:
             return
         # endif
 
-        def inscost(a):
+        def inscost(a: str):
             if a == "_":
                 return 0
             return 2
 
-        def subcost(p, a):
+        def subcost(p: str, a: str):
             if a == "_":
                 return 100
             if (a in "IJij" and p in "IJij") or (a in "UVuv" and p in "UVuv"):
@@ -379,15 +366,10 @@ class Token:
         result = result.replace("__", "_")
         self.macronized = result
 
-    # enddef
-
-
-# endclass
-
 
 class Tokenization:
-    def __init__(self, text):
-        self.tokens = []
+    def __init__(self, text: str):
+        self.tokens: list[Token] = []
         possiblesentenceend = False
         sentencehasended = True
         # This does not work?: [^\W\d_]+|\s+|([^\w\s]|[\d_])+
@@ -405,16 +387,12 @@ class Tokenization:
             self.tokens.append(token)
         self.scannedfeet = []
 
-    # enddef
-
     def allwordforms(self):
-        words = set()
+        words: set[str] = set()
         for token in self.tokens:
             if token.isword:
                 words.add(toascii(token.text).lower())
         return words
-
-    # enddef
 
     dividenda = {
         "nequid": 4,
@@ -550,8 +528,6 @@ class Tokenization:
         self.tokens = newtokens
         return newwords
 
-    # enddef
-
     def show(self):
         for token in self.tokens[:500]:
             if token.isword:
@@ -560,8 +536,6 @@ class Tokenization:
                 print()
         if len(self.tokens) > 500:
             print("... (truncated) ...")
-
-    # enddef
 
     def addtags(self):
         totaggerfd, totaggerfname = mkstemp()
@@ -585,7 +559,7 @@ class Tokenization:
                         savedencliticbearer = None
                 if token.endssentence:
                     totaggerfile.write("\n")
-        rftagger_model = os.path.join(os.path.dirname(__file__), "rftagger-ldt.model")
+        rftagger_model = BASE_DIR / "rftagger-ldt.model"
         rft_command = "%s/rft-annotate -s -q %s %s %s" % (
             RFTAGGER_DIR,
             rftagger_model,
@@ -622,7 +596,10 @@ class Tokenization:
                     except AssertionError:
                         raise Exception(
                             "Error: Could not handle tagging data in file %s:\n'%s'"
-                            % (fromtaggerfname, "Premature End Of File." if not line else line)
+                            % (
+                                fromtaggerfname,
+                                "Premature End Of File." if not line else line,
+                            )
                         )
                     # endtry
                     token.tag = tag.replace(".", "")
@@ -631,10 +608,12 @@ class Tokenization:
         os.remove(totaggerfname)
         os.remove(fromtaggerfname)
 
-    # enddef
-
     def addlemmas(self, wordlist):
-        from lemmas import lemma_frequency, word_lemma_freq, wordform_to_corpus_lemmas
+        from macronizer.data.lemmas import (
+            lemma_frequency,
+            word_lemma_freq,
+            wordform_to_corpus_lemmas,
+        )
 
         for token in self.tokens:
             wordform = toascii(token.text)
@@ -653,8 +632,6 @@ class Tokenization:
             # endif
             token.lemma = best_lemma
 
-    # enddef
-
     def getaccents(self, wordlist):
         def levenshtein(s1, s2):
             if len(s1) < len(s2):
@@ -672,9 +649,7 @@ class Tokenization:
                 previous_row = current_row
             return previous_row[-1]
 
-        # enddef
-
-        from macronized_endings import tag_to_endings
+        from macronizer.data.macronized_endings import tag_to_endings
 
         for token in self.tokens:
             if not token.isword:
@@ -720,9 +695,7 @@ class Tokenization:
                             break
                     token.isunknown = True
 
-    # enddef
-
-    def scanverses(self, meterautomatons):
+    def scanverses(self, meterautomatons: list[Scansion]):
         """Try to scan the text according to meterautomatons. This function will, for each token,
         reconsider the order of the accented forms given by the getaccents function, by finding
         a likely combination of accented forms that make the verses scan."""
@@ -736,9 +709,7 @@ class Tokenization:
             accented = re.sub("_\^m$", "m", accented)
             return accented
 
-        # enddef
-
-        def separate_ambiguous_vowels(accenteds):
+        def separate_ambiguous_vowels(accenteds: list[str]) -> list[str]:
             """
             If a vowel is ambiguous (_^), generate separate accented forms, one for each possible combination.
             Input: ['ba_^ce_^]
@@ -751,12 +722,12 @@ class Tokenization:
                 "ipsi_us": "ipsi_^us",
                 "alteri_us": "alteri_^us",
             }
-            new_accenteds = []
+            new_accenteds: list[str] = []
             for accented in accenteds:
                 accented = accented_modifications.get(accented, accented)
                 parts = accented.split("_^")
                 for variant in range(1 << len(parts) - 1):
-                    new_accented = []
+                    new_accented: list[str] = []
                     for bit_pos, part in enumerate(parts):
                         new_accented.append(part)
                         if 1 << bit_pos & variant:
@@ -764,9 +735,7 @@ class Tokenization:
                     new_accenteds.append("".join(new_accented))
             return new_accenteds
 
-        # enddef
-
-        def segmentaccented(accented):
+        def segmentaccented(accented: str) -> list[str]:
             """Split an accented form into a list of individual vowel phonemes and consonant clusters"""
             if accented == "hoc":  # Ad hoc fix. (Haha!)
                 return ["o", "cc"]
@@ -778,7 +747,7 @@ class Tokenization:
                 .replace("+", "^")
                 + "#"
             )
-            segments = []
+            segments: list[str] = []
             segmentstart = 0
             pos = 0
             while True:
@@ -802,9 +771,7 @@ class Tokenization:
                 segmentstart = pos
             return segments
 
-        # enddef
-
-        def possiblescans(accentedcandidates, followingsegment):
+        def possiblescans(accentedcandidates: list[str], followingsegment: str):
             """A form with marked vowel lengths can be scanned differently, considering
             muta cum liquida, diphthong vs. diaeresis, elision, etc.
             input: followingsegment is one of ["V", "C", "CC", "#"]
@@ -816,7 +783,7 @@ class Tokenization:
             SYNEZISPENALTY = 3
             HIATUSPENALTY = 3
             isfirstaccented = True
-            scans = []
+            scans: list[tuple[int, str, str]] = []
             for accented in separate_ambiguous_vowels(accentedcandidates):
                 segments = segmentaccented(accented)
                 segments.append(followingsegment)
@@ -825,9 +792,9 @@ class Tokenization:
                 for i, thisseg in enumerate(segments):
                     prevseg = "#" if i == 0 else segments[i - 1]
                     nextseg = "#" if i == len(segments) - 1 else segments[i + 1]
-                    if i == 0 and not thisseg[0] in "aeiouy":
+                    if i == 0 and thisseg[0] not in "aeiouy":
                         continue
-                    news = []
+                    news: list[tuple[int, str]] = []
                     for penaltysofar, scansofar in temps:
                         if "_" in thisseg:
                             news.append((penaltysofar, scansofar + "L"))
@@ -880,15 +847,13 @@ class Tokenization:
                     scansion = re.sub("^C*", "", scansion)
                     scans.append((penalty, scansion, accented))
                 isfirstaccented = False
-            filteredscans = []
-            foundscansions = set()
+            filteredscans: list[tuple[int, str, str]] = []
+            foundscansions: set[str] = set()
             for penalty, scansion, accented in sorted(scans):
                 if scansion not in foundscansions:
                     filteredscans.append((penalty, scansion, accented))
                     foundscansions.add(scansion)
             return filteredscans
-
-        # enddef
 
         def scanverse(verse, automaton):
             """Input: The "verse" is a complicated list of the format
@@ -896,7 +861,7 @@ class Tokenization:
             For example: [(0, [(0, 'L', 'in')]), (2, [(0, 'SL', 'no^va_'), (1, 'SS', 'no^va')]), ...]
             It returns a tuple such as ([(0, 'in'), (2, 'no^va'), (4, 'fe^rt'), ...], 'DDSSDS')"""
 
-            def scanverserecurse(verse, wordindex, automaton, oldnodeindex):
+            def scanverserecurse(verse, wordindex: int, automaton, oldnodeindex: int):
                 if wordindex == len(verse):
                     return [], [], 0
                 (tokenindex, wordscansions) = verse[wordindex]
@@ -931,11 +896,8 @@ class Tokenization:
                         besttailpenalty = scanpenalty + meterpenalty + tailpenalty
                 return besttail, besttailfeet, besttailpenalty
 
-            # enddef
             indexaccentedpairs, feet, penalty = scanverserecurse(verse, 0, automaton, 0)
             return indexaccentedpairs, "".join(feet)
-
-        # enddef
 
         self.scannedfeet = []
         verse = []
@@ -981,16 +943,12 @@ class Tokenization:
                 if automatonindex == len(meterautomatons):
                     automatonindex = 0
 
-    # enddef
-
-    def macronize(self, domacronize, alsomaius, performutov, performitoj):
+    def macronize(self, domacronize: bool, alsomaius: bool, performutov: bool, performitoj: bool):
         for token in self.tokens:
             token.macronize(domacronize, alsomaius, performutov, performitoj)
 
-    # enddef
-
-    def detokenize(self, markambiguous):
-        result = []
+    def detokenize(self, markambiguous: bool):
+        result: list[str] = []
         for token in self.tokens:
             if token.isword:
                 unicodetext = postags.unicodeaccents(token.macronized)
@@ -1012,14 +970,9 @@ class Tokenization:
                     result.append(token.macronized)
         return "".join(result)
 
-    # enddef
-
-
-# endclass
-
 
 class Macronizer:
-    dactylichexameter = {
+    dactylichexameter: Scansion = {
         (0, "L"): (1, "", 0),
         (0, "S"): (-1, "", 0),
         (1, "L"): (3, "S", 0),
@@ -1056,7 +1009,7 @@ class Macronizer:
         (16, "S"): (0, "T", 0),
     }
 
-    dactylicpentameter = {
+    dactylicpentameter: Scansion = {
         (0, "L"): (1, "", 0),
         (0, "S"): (-1, "", 0),
         (1, "L"): (3, "S", 0),
@@ -1087,7 +1040,7 @@ class Macronizer:
         (13, "S"): (0, "-", 0),
     }
 
-    hendecasyllable = {
+    hendecasyllable: Scansion = {
         (0, "L"): (1, "-", 0),
         (0, "S"): (1, "u", 0),
         (1, "L"): (2, "-", 0),
@@ -1112,7 +1065,7 @@ class Macronizer:
         (10, "S"): (0, "u", 0),
     }
 
-    iambictrimeter = {
+    iambictrimeter: Scansion = {
         (0, "L"): (3, "-", 0),
         (0, "S"): (1, "u", 0),
         (1, "L"): (5, "-|", 0),
@@ -1159,7 +1112,7 @@ class Macronizer:
         (20, "S"): (0, "u", 0),
     }
 
-    iambicdimeter = {
+    iambicdimeter: Scansion = {
         (0, "L"): (3, "-", 0),
         (0, "S"): (1, "u", 0),
         (1, "L"): (5, "-|", 0),
@@ -1196,9 +1149,7 @@ class Macronizer:
         self.wordlist = Wordlist()
         self.tokenization = Tokenization("")
 
-    # enddef
-
-    def settext(self, text):
+    def settext(self, text: str):
         self.tokenization = Tokenization(text)
         self.wordlist.loadwords(self.tokenization.allwordforms())
         newwordforms = self.tokenization.splittokens(self.wordlist)
@@ -1207,45 +1158,34 @@ class Macronizer:
         self.tokenization.addlemmas(self.wordlist)
         self.tokenization.getaccents(self.wordlist)
 
-    # enddef
-
-    def scan(self, automatons):
+    def scan(self, automatons: list[Scansion]):
         self.tokenization.scanverses(automatons)
-
-    # enddef
 
     def gettext(
         self,
-        domacronize=True,
-        alsomaius=False,
-        performutov=False,
-        performitoj=False,
-        markambigs=False,
+        domacronize: bool = True,
+        alsomaius: bool = False,
+        performutov: bool = False,
+        performitoj: bool = False,
+        markambigs: bool = False,
     ):
         self.tokenization.macronize(domacronize, alsomaius, performutov, performitoj)
         return self.tokenization.detokenize(markambigs)
 
-    # enddef
-
     def macronize(
         self,
-        text,
-        domacronize=True,
-        alsomaius=False,
-        performutov=False,
-        performitoj=False,
-        markambigs=False,
+        text: str,
+        domacronize: bool = True,
+        alsomaius: bool = False,
+        performutov: bool = False,
+        performitoj: bool = False,
+        markambigs: bool = False,
     ):
         self.settext(text)
         return self.gettext(domacronize, alsomaius, performutov, performitoj, markambigs)
 
-    # enddef
 
-
-# endclass
-
-
-def evaluate(goldstandard, macronizedtext):
+def evaluate(goldstandard: str, macronizedtext: str):
     vowelcount = 0
     lengthcorrect = 0
     outtext = []
@@ -1263,9 +1203,6 @@ def evaluate(goldstandard, macronizedtext):
         else:
             outtext.append('<span class="wrong">%s</span>' % b)
     return lengthcorrect / float(vowelcount), "".join(outtext)
-
-
-# enddef
 
 
 if __name__ == "__main__":

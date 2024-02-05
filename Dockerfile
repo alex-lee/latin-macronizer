@@ -20,7 +20,7 @@ RUN cd morpheus/src \
     && make install \
     && cd .. \
     && ./update.sh \
-    && ./update.sh 
+    && ./update.sh
 
 # Install RFTagger.
 RUN curl -sSL -o RFTagger.zip https://www.cis.uni-muenchen.de/~schmid/tools/RFTagger/data/RFTagger.zip \
@@ -35,12 +35,14 @@ RUN curl -sSL -o RFTagger.zip https://www.cis.uni-muenchen.de/~schmid/tools/RFTa
     && rm -rf ./RFTagger
 
 # Copy project files.
-COPY *.txt *.py *.sh ./
+COPY *.txt *.py *.sh pyproject.toml ./
+COPY macronizer ./macronizer
+RUN pip install -e .
 
-# Initialize data.
+# # Initialize data.
 RUN git clone --depth=1 https://github.com/Alatius/treebank_data.git \
     && ./train-rftagger.sh \
-    && python macronize.py --initialize \
+    && macronize --initialize \
     && rm -rf ./treebank_data
 
 # Configure web server.
@@ -50,6 +52,6 @@ RUN sed -i \
     -e '/cgi.assign/s "" "/usr/local/bin/python" ' \
     /etc/lighttpd/conf-available/10-cgi.conf \
     && lighty-enable-mod cgi \
-    && ln -s /opt/latin-macronizer/macronize.py /usr/lib/cgi-bin/macronize.py
+    && ln -s /usr/local/bin/macronize-cgi /usr/lib/cgi-bin/macronize.py
 
 CMD /bin/bash

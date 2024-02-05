@@ -1,1 +1,15 @@
 /morpheus/
+/treebank_data/
+
+/*.egg-info
+/.python-version
+**/__pycache__
+/pyrightconfig.json
+
+/ldt-corpus.txt
+/macronizer.db
+/rftagger-ldt.model
+/rftagger-lexicon.txt
+
+/macronizer/data/lemmas.py
+/macronizer/data/macronized_endings.py
