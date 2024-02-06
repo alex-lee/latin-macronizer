@@ -1,6 +1,3 @@
-#!/usr/bin/python
-# -*- coding: utf-8 -*-
-
 # Copyright 2015 Johan Winge
 #
 # This program is free software: you can redistribute it and/or modify
@@ -17,8 +14,12 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import re
+import typing as t
 
-featMap = {}
+
+Parse: t.TypeAlias = dict[str, str]
+
+featMap: dict[str, list[str]] = {}
 
 PART_OF_SPEECH = "pos"
 NOUN = "noun"
@@ -126,8 +127,8 @@ LEMMA = "lemma"
 ACCENTEDFORM = "accentedform"
 
 
-def ldt_to_parse(ldt_tag):
-    parse = {}
+def ldt_to_parse(ldt_tag: list[str]):
+    parse: Parse = {}
 
     if ldt_tag[0] == "-":
         pass
@@ -271,7 +272,7 @@ def ldt_to_parse(ldt_tag):
     return parse
 
 
-def parse_to_ldt(parse):
+def parse_to_ldt(parse: Parse):
     ldt_tag = ""
 
     if parse.get(PART_OF_SPEECH, "") == NOUN:
@@ -421,7 +422,7 @@ def parse_to_ldt(parse):
     return ldt_tag
 
 
-def unicodeaccents(txt):
+def unicodeaccents(txt: str):
     for source, replacement in [
         ("a_", "ā"),
         ("e_", "ē"),
@@ -450,7 +451,7 @@ def unicodeaccents(txt):
     return txt
 
 
-def escape_macrons(txt):
+def escape_macrons(txt: str):
     for source, replacement in [
         ("ā", "a_"),
         ("ē", "e_"),
@@ -469,7 +470,7 @@ def escape_macrons(txt):
     return txt
 
 
-def removemacrons(txt):
+def removemacrons(txt: str):
     for source, replacement in [
         ("ā", "a"),
         ("ē", "e"),
@@ -488,7 +489,7 @@ def removemacrons(txt):
     return txt
 
 
-def filter_accents(accented):
+def filter_accents(accented: str):
     accented = accented.replace("^_", "_^")
     accented = re.sub("_\^([bcdfgpt][lr])", "^\\1", accented)
     accented = re.sub("u_m$", "um", accented)
@@ -496,9 +497,9 @@ def filter_accents(accented):
     return accented
 
 
-def morpheus_to_parses(wordform, nl):
+def morpheus_to_parses(wordform: str, nl: str):
     """Based on CruncherToXML.java in Perseus Hopper"""
-    parse = {}
+    parse: Parse = {}
     nl = nl.replace("irreg_comp", "irreg comp")
     nl = nl.replace("irreg_superl", "irreg superl")
     morph_codes = nl.split()
@@ -597,7 +598,7 @@ def morpheus_to_parses(wordform, nl):
     else:
         print("Warning: Unknown Morpheus Part-of-Speech tag: " + pos_abbrev)
 
-    def setfeature(parse, code, overwrite=False):
+    def setfeature(parse: Parse, code: str, overwrite: bool = False):
         featfound = False
         for feature, possiblevalues in featMap.items():
             if code in possiblevalues:
@@ -626,7 +627,7 @@ def morpheus_to_parses(wordform, nl):
         code = morph_codes[i]
         if code.count("/") > 0:
             code_components = code.split("/")
-            new_parses = []
+            new_parses: list[Parse] = []
             for existingParse in grouped_parses:
                 for code_component in code_components:
                     dup_parse = existingParse.copy()
@@ -639,7 +640,7 @@ def morpheus_to_parses(wordform, nl):
 
     # Morpheus does not report gerunds, only gerundives. So for those gerundives which look like gerunds, add alternative parses.
     # Similarly, many third declension nomina which can be of any gender are not marked for gender at all.
-    final_parses = []
+    final_parses: list[Parse] = []
     for parse in grouped_parses:
         if (
             parse.get(MOOD, "") == GERUNDIVE
@@ -663,7 +664,7 @@ def morpheus_to_parses(wordform, nl):
     return final_parses
 
 
-def parse_to_proiel_tag(parse):
+def parse_to_proiel_tag(parse: Parse) -> str:
     tag = ""
 
     if parse.get(PART_OF_SPEECH, "") == NOUN:
@@ -803,11 +804,11 @@ def parse_to_proiel_tag(parse):
     return tag
 
 
-def parses_to_proiel_tags(parses):
-    tags = []
+def parses_to_proiel_tags(parses: list[Parse]):
+    tags: list[str] = []
     for parse in parses:
         tags.append(parse_to_proiel_tag(parse))
-    tagswithgender = {}
+    tagswithgender: dict[str, set[str]] = {}
     for tag in tags:
         withoutgender = tag[0:7] + tag[8:12]
         tagswithgender[withoutgender] = tagswithgender.get(withoutgender, set()) | {tag[7]}
@@ -853,13 +854,13 @@ def parses_to_proiel_tags(parses):
     return tags
 
 
-def tag_distance(tag1, tag2):
+def tag_distance(tag1: str, tag2: str):
     """To help select the best alternative, define a measure to compare how similar tags are."""
     if not (len(tag1) == len(tag2) == 9 or len(tag1) == len(tag2) == 12):
         print("Warning: Strange or mismatching tags!", tag1, tag2)
         exit(0)
 
-    def is_nomen(tag):
+    def is_nomen(tag: str):
         if (
             tag[0] == "n"
             or tag[0] == "a"

@@ -1,8 +1,26 @@
+[project]
+name = "latin-macronizer"
+dependencies = []
+version = "0.1.0"
+
+[project.optional-dependencies]
+development = ["pyright", "ruff"]
+
+[project.scripts]
+macronize = "macronizer.cli:parser"
+macronize-cgi = "macronizer.cgi:handler"
+
+[tool.setuptools.packages.find]
+include = ["macronizer"]
+
+[tool.ruff]
+line-length = 100
+
 [tool.black]
 line-length = 100
 exclude = """
 (
-  ^/lemmas.py
-  | ~/macronized_endings.py
+  ^/macronizer/data/lemmas\\.py
+  | ^/macronizer/data/macronized_endings\\.py
 )
 """

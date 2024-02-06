@@ -1,14 +1,17 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-import postags
 from collections import defaultdict
-import xml.etree.ElementTree as ET
 import pprint
+from xml.etree import ElementTree as ET
+
+from macronizer import postags
+
 
 pp = pprint.PrettyPrinter()
 
-tag_to_accents = defaultdict(list)
+tag_to_accents: dict[str, list[str]] = defaultdict(list)
+
 with open("macrons.txt", "r", encoding="utf-8") as macrons_file, open(
     "rftagger-lexicon.txt", "w", encoding="utf-8"
 ) as lexicon_file:
@@ -22,15 +25,15 @@ with open("macrons.txt", "r", encoding="utf-8") as macrons_file, open(
         lexicon_file.write("%s\t%s\t%s\n" % (wordform, tag, lemma))
 
 
-with open("macronized_endings.py", "w", encoding="utf-8") as endings_file:
+with open("macronizer/data/macronized_endings.py", "w", encoding="utf-8") as endings_file:
     endings_file.write("tag_to_endings = {\n")
     for tag in sorted(tag_to_accents):
-        ending_freqs = defaultdict(int)
+        ending_freqs: dict[str, int] = defaultdict(int)
         for accented in tag_to_accents[tag]:
             for i in range(1, min(len(accented) - 3, 12)):
                 ending = accented[-i:]
                 ending_freqs[ending] += 1
-        relevant_endings = []
+        relevant_endings: list[str] = []
         for ending in ending_freqs:
             ending_without_macrons = postags.removemacrons(ending)
             if ending[0] != ending_without_macrons[0] and ending_freqs[ending] > ending_freqs.get(
@@ -91,9 +94,9 @@ with open("ldt-corpus.txt", "w", encoding="utf-8") as pos_corpus_file:
             pos_corpus_file.write(line)
 
 
-lemma_frequency = defaultdict(int)
-word_lemma_freq = defaultdict(int)
-wordform_to_corpus_lemmas = defaultdict(list)
+lemma_frequency: dict[str, int] = defaultdict(int)
+word_lemma_freq: dict[tuple[str, str], int] = defaultdict(int)
+wordform_to_corpus_lemmas: dict[str, list[str]] = defaultdict(list)
 with open("ldt-corpus.txt", "r", encoding="utf-8") as pos_corpus_file:
     for line in pos_corpus_file:
         if "\t" in line:
@@ -104,7 +107,7 @@ with open("ldt-corpus.txt", "r", encoding="utf-8") as pos_corpus_file:
             word_lemma_freq[(wordform, lemma)] += 1
             if lemma not in wordform_to_corpus_lemmas[wordform]:
                 wordform_to_corpus_lemmas[wordform].append(lemma)
-with open("lemmas.py", "w", encoding="utf-8") as lemma_file:
+with open("macronizer/data/lemmas.py", "w", encoding="utf-8") as lemma_file:
     lemma_file.write("lemma_frequency = %s\n" % pp.pformat(dict(lemma_frequency)))
     lemma_file.write("word_lemma_freq = %s\n" % pp.pformat(dict(word_lemma_freq)))
     lemma_file.write(
