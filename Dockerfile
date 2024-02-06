@@ -34,6 +34,10 @@ RUN curl -sSL -o RFTagger.zip https://www.cis.uni-muenchen.de/~schmid/tools/RFTa
     && cd ../.. \
     && rm -rf ./RFTagger
 
+# Install python dependencies.
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
 # Copy project files.
 COPY *.txt *.py *.sh pyproject.toml ./
 COPY macronizer ./macronizer
