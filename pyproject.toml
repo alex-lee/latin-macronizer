@@ -1,6 +1,6 @@
 [project]
 name = "latin-macronizer"
-dependencies = ["falcon", "gunicorn"]
+dependencies = ["falcon", "gunicorn", "pydantic"]
 version = "0.1.0"
 
 [project.optional-dependencies]
