@@ -1,10 +1,13 @@
-/morpheus/
-/treebank_data/
+/.git/
 
+**/__pycache__
 /*.egg-info
 /.python-version
-**/__pycache__
+/.ruff_cache/
 /pyrightconfig.json
+
+/morpheus/
+/treebank_data/
 
 /ldt-corpus.txt
 /macronizer.db
