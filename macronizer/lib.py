@@ -947,13 +947,13 @@ class Tokenization:
         for token in self.tokens:
             token.macronize(domacronize, alsomaius, performutov, performitoj)
 
-    def detokenize(self, markambiguous: bool, mark_vowels: bool = True):
+    def detokenize(self, markambiguous: bool, wrap_vowels: bool = True):
         result: list[str] = []
         for token in self.tokens:
             if token.isword:
                 unicodetext = postags.unicodeaccents(token.macronized)
                 if markambiguous:
-                    if mark_vowels:
+                    if wrap_vowels:
                         unicodetext = re.sub(
                             r"([āēīōūȳĀĒĪŌŪȲaeiouyAEIOUY])", "<span>\\1</span>", unicodetext
                         )
@@ -1169,10 +1169,10 @@ class Macronizer:
         performutov: bool = False,
         performitoj: bool = False,
         markambigs: bool = False,
-        mark_vowels: bool = True,
+        wrap_vowels: bool = True,
     ):
         self.tokenization.macronize(domacronize, alsomaius, performutov, performitoj)
-        return self.tokenization.detokenize(markambigs, mark_vowels)
+        return self.tokenization.detokenize(markambigs, wrap_vowels)
 
     def macronize(
         self,
@@ -1182,11 +1182,11 @@ class Macronizer:
         performutov: bool = False,
         performitoj: bool = False,
         markambigs: bool = False,
-        mark_vowels: bool = True,
+        wrap_vowels: bool = True,
     ):
         self.settext(text)
         return self.gettext(
-            domacronize, alsomaius, performutov, performitoj, markambigs, mark_vowels
+            domacronize, alsomaius, performutov, performitoj, markambigs, wrap_vowels
         )
 
 

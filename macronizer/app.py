@@ -94,7 +94,7 @@ class MacronizeAPIResource:
             performutov=params.u_to_v,
             performitoj=params.i_to_j,
             markambigs=mark_ambig,
-            mark_vowels=False,
+            wrap_vowels=False,
         )
 
     def on_post(self, req: falcon.Request, resp: falcon.Response):
