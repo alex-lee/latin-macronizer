@@ -3,5 +3,5 @@ services:
     image: latin-macronizer
     build: .
     ports:
-      - 8080:80
-    command: lighttpd -f /etc/lighttpd/lighttpd.conf -D
+      - 8080:8080
+    command: ["gunicorn", "-b", "0.0.0.0:8080", "macronizer.wsgi:app"]

@@ -6,7 +6,6 @@ RUN apt-get update -qq \
     curl \
     git \
     libfl-dev \
-    lighttpd \
     procps \
     unzip \
     && rm -rf /var/lib/apt/lists/*
@@ -34,6 +33,10 @@ RUN curl -sSL -o RFTagger.zip https://www.cis.uni-muenchen.de/~schmid/tools/RFTa
     && cd ../.. \
     && rm -rf ./RFTagger
 
+# Install python dependencies.
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
 # Copy project files.
 COPY *.txt *.py *.sh pyproject.toml ./
 COPY macronizer ./macronizer
@@ -44,14 +47,5 @@ RUN git clone --depth=1 https://github.com/Alatius/treebank_data.git \
     && ./train-rftagger.sh \
     && macronize --initialize \
     && rm -rf ./treebank_data
-
-# Configure web server.
-# Adjust the CGI module config and enable.
-RUN sed -i \
-    -e '/cgi.assign/s "" ".py" ' \
-    -e '/cgi.assign/s "" "/usr/local/bin/python" ' \
-    /etc/lighttpd/conf-available/10-cgi.conf \
-    && lighty-enable-mod cgi \
-    && ln -s /usr/local/bin/macronize-cgi /usr/lib/cgi-bin/macronize.py
 
 CMD /bin/bash
