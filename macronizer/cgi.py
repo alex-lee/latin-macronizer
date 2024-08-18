@@ -24,7 +24,6 @@ import unicodedata
 
 from macronizer.lib import Macronizer, Scansion, evaluate
 
-
 SCANSIONS: list[tuple[str, list[Scansion]]] = [
     ("prose (no scansion)", []),
     ("dactylic hexameters", [Macronizer.dactylichexameter]),
@@ -35,7 +34,7 @@ SCANSIONS: list[tuple[str, list[Scansion]]] = [
         [Macronizer.iambictrimeter, Macronizer.iambicdimeter],
     ),
 ]
-TRUNCATETHRESHOLD = 50000  # Set to -1 to disable
+TRUNCATETHRESHOLD = int(os.getenv("TRUNCATETHRESHOLD", 50000))
 DEBUGCOMMAND = "DEBUG\n"
 
 

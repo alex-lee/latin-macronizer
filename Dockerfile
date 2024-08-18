@@ -49,3 +49,5 @@ RUN git clone --depth=1 https://github.com/Alatius/treebank_data.git \
     && rm -rf ./treebank_data
 
 CMD /bin/bash
+
+ENV TRUNCATETHRESHOLD=-1
